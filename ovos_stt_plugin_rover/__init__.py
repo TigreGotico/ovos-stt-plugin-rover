@@ -28,6 +28,26 @@ class ROVERSTT(STT):
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the ROVERSTT instance by loading configured backend STT plugins, configuring execution parameters, and selecting the consensus algorithm.
+        
+        Parameters:
+            config (Optional[Dict[str, Any]]): Configuration dictionary. Expected keys:
+                - "backends" (List[Dict]): Required. Each entry must include:
+                    - "module" (str): module path/name of the STT plugin to load.
+                    - "config" (Dict, optional): plugin-specific config passed to the plugin constructor.
+                    - "weight" (float, optional): weight used by WeightedROVER (default 1.0).
+                - "timeout" (float, optional): per-backend timeout in seconds (default 10.0).
+                - "workers" (int, optional): maximum parallel worker threads (default number of backends).
+                - "algo" (str, optional): consensus algorithm to use; supported values:
+                    - "wROVER" → WeightedROVER
+                    - "itROVER" → IterativeROVER
+                    - any other value → ROVER (default)
+        
+        Raises:
+            RuntimeError: If "backends" is missing or empty, if a backend entry lacks a "module" key,
+                          or if all configured backends fail to load.
+        """
         super().__init__(config)
 
         backend_cfgs = self.config.get("backends", [])
@@ -71,7 +91,20 @@ class ROVERSTT(STT):
     def _run_backend(
             self, stt: STT, audio: AudioData, language: Optional[str]
     ) -> Tuple[bool, Optional[str], Optional[Exception]]:
-        """Isolated execution wrapper for a backend."""
+        """
+            Run a single backend STT and return its outcome.
+            
+            Parameters:
+                stt (STT): Backend STT instance to invoke.
+                audio (AudioData): Audio to transcribe.
+                language (Optional[str]): Optional language hint for the backend.
+            
+            Returns:
+                Tuple[bool, Optional[str], Optional[Exception]]: A tuple of (ok, transcript, error) where
+                    `ok` is True if the backend produced a non-empty transcription,
+                    `transcript` is the stripped transcription string or None,
+                    and `error` is the exception caught from the backend or None.
+            """
         try:
             text = stt.execute(audio, language)
 
@@ -130,9 +163,12 @@ class ROVERSTT(STT):
     @classproperty
     def available_languages(cls) -> set:
         """
-        Intersection of all backend supported languages.
-
-        This is a static property; it reads plugin configuration from core config.
+        Compute the set of languages supported by all configured STT backends.
+        
+        Reads the "stt.backends" entries from core configuration and returns the intersection of each backend's `available_languages`. If no backends are configured or there is no common language, returns an empty set.
+        
+        Returns:
+            set: Language identifiers supported by every configured backend (empty if none).
         """
         cfg = cls.config_core.get("stt", {}).get("backends", [])
         if not cfg:
