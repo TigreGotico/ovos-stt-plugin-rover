@@ -7,7 +7,7 @@ It delivers **higher transcription accuracy** at the cost of **additional comput
 
 ## What is ROVER?
 
-**ROVER** is a post-processing method introduced by J. G. Fiscus (ASRU 1997).
+**ROVER** is a post-processing method introduced by [J. G. Fiscus (ASRU 1997)](https://people.csail.mit.edu/joe/sctk-1.2/doc/rover/rover.htm).
 It aligns multiple ASR hypotheses using a dynamic-programming sequence alignment algorithm, constructs a **Word Transition Network (WTN)**, and performs **majority voting** at each aligned position to produce a consensus output.
 
 ROVER reduces the impact of individual backend biases or failure modes:
