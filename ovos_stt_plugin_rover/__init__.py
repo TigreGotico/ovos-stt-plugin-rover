@@ -59,12 +59,13 @@ class ROVERSTT(STT):
 
         # Select Algorithm
         algo = self.config.get("algo", "ROVER").lower()
-        if algo == "wROVER":
+        if algo == "wROVER".lower():
             self.rover = WeightedROVER(weights=weights)
-        elif algo == "itROVER":
+        elif algo == "itROVER".lower():
             self.rover = IterativeROVER()
         else:
             self.rover = ROVER()
+        LOG.info(f"algorithm: {self.rover.__class__.__name__}")
 
     # ----------------------------------------------------------------------
 

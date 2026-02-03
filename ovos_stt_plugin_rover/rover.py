@@ -282,17 +282,15 @@ class ROVER:
     @staticmethod
     def _get_result(edges: List[Dict[str, AlignmentEdge]]) -> List[str]:
         """
-        Compute final consensus tokens by majority vote.
+        Produce a consensus token sequence from a Word Transition Network by majority voting.
 
-        Parameters
-        ----------
-        edges:
-            WTN as a list of token→edge dictionaries.
+        For each WTN column, selects the token with the maximum tuple (sources_count, token length, token) and returns the sequence of selected tokens.
 
-        Returns
-        -------
-        list of str
-            The voted output token sequence.
+        Parameters:
+            edges (List[Dict[str, AlignmentEdge]]): WTN represented as a list of dictionaries mapping token text to its AlignmentEdge.
+
+        Returns:
+            List[str]: The voted output token sequence.
         """
         result: List[str] = []
 
@@ -313,12 +311,32 @@ class WeightedROVER(ROVER):
     Uses a fixed list of weights corresponding to the order of hypotheses.
     """
     def __init__(self, weights: List[float], **kwargs):
+        """
+        Initialize a WeightedROVER with per-hypothesis weights and base ROVER configuration.
+
+        Parameters:
+            weights (List[float]): Per-hypothesis weights in the same order as input hypotheses; used to weight contributions during consensus voting.
+            **kwargs: Passed through to the base ROVER initializer (tokenizer, detokenizer, silent, etc.).
+        """
         super().__init__(**kwargs)
         self.weights = weights
 
     def fit(self, hyps: Sequence[str]) -> str:
         # If weights aren't provided for all hyps, default missing ones to 1.0
+        """
+        Generate a consensus transcript from multiple hypothesis strings using confidence weights for voting.
+
+        Builds a word transition network by tokenizing each hypothesis, merging them with the per-hypothesis weights supplied at construction (any missing weights default to 1.0 in order), performs alignment and weighted voting to produce a consensus token sequence, and returns the detokenized consensus.
+
+        Parameters:
+            hyps (Sequence[str]): Ordered sequence of hypothesis strings to combine; weights correspond by index to these hypotheses.
+
+        Returns:
+            str: Final consensus transcript produced after the second-pass alignment.
+        """
+        # If weights aren't provided for all hyps, default missing ones to 1.0
         active_weights = self.weights + [1.0] * (len(hyps) - len(self.weights))
+        ref_weight_sum = active_weights[0]
 
         tokenized = [self.tokenizer(h) for h in hyps]
 
@@ -329,9 +347,10 @@ class WeightedROVER(ROVER):
 
         # Iteratively align and add weighted counts
         for i, tokens in enumerate(tokenized[1:], start=1):
-            hyp_token_edges = [AlignmentEdge(w, active_weights[i]) for w in tokens]
-            edges = self._align(edges, hyp_token_edges, sources_count=i)
-
+            hyp_weight = active_weights[i]
+            hyp_token_edges = [AlignmentEdge(w, hyp_weight) for w in tokens]
+            edges = self._align(edges, hyp_token_edges, sources_count=ref_weight_sum)
+            ref_weight_sum += hyp_weight
         consensus = self._get_result(edges)
         return self.detokenizer(consensus)
 
@@ -344,6 +363,17 @@ class IterativeROVER(ROVER):
 
     def fit(self, hyps: Sequence[str]) -> str:
         # Pass 1: Standard consensus
+        """
+        Refines a consensus transcript by running a two-pass ROVER alignment.
+
+        Performs an initial consensus on the provided hypotheses, then re-aligns all hypotheses using that initial consensus as the primary reference (prepended) to produce a stabilized final consensus.
+
+        Parameters:
+            hyps (Sequence[str]): Candidate transcripts (hypotheses) to merge.
+
+        Returns:
+            str: Final consensus transcript produced after the second-pass alignment.
+        """
         initial_consensus = super().fit(hyps)
 
         # Pass 2: Re-align all hypotheses using the consensus as the primary reference
