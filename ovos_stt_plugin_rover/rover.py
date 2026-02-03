@@ -305,3 +305,48 @@ class ROVER:
             result.append(token)
 
         return result
+
+
+class WeightedROVER(ROVER):
+    """
+    wROVER: Confidence-Weighted ROVER.
+    Uses a fixed list of weights corresponding to the order of hypotheses.
+    """
+    def __init__(self, weights: List[float], **kwargs):
+        super().__init__(**kwargs)
+        self.weights = weights
+
+    def fit(self, hyps: Sequence[str]) -> str:
+        # If weights aren't provided for all hyps, default missing ones to 1.0
+        active_weights = self.weights + [1.0] * (len(hyps) - len(self.weights))
+
+        tokenized = [self.tokenizer(h) for h in hyps]
+
+        # Initial WTN from first hypothesis using its weight
+        edges: List[Dict[str, AlignmentEdge]] = [
+            {e.value: e} for e in [AlignmentEdge(w, active_weights[0]) for w in tokenized[0]]
+        ]
+
+        # Iteratively align and add weighted counts
+        for i, tokens in enumerate(tokenized[1:], start=1):
+            hyp_token_edges = [AlignmentEdge(w, active_weights[i]) for w in tokens]
+            edges = self._align(edges, hyp_token_edges, sources_count=i)
+
+        consensus = self._get_result(edges)
+        return self.detokenizer(consensus)
+
+
+class IterativeROVER(ROVER):
+    """
+    itROVER: Multi-Pass / Iterative ROVER.
+    Uses the first pass consensus as a high-confidence anchor for a second pass.
+    """
+
+    def fit(self, hyps: Sequence[str]) -> str:
+        # Pass 1: Standard consensus
+        initial_consensus = super().fit(hyps)
+
+        # Pass 2: Re-align all hypotheses using the consensus as the primary reference
+        # We put the consensus first to stabilize the WTN structure
+        augmented_hyps = [initial_consensus] + list(hyps)
+        return super().fit(augmented_hyps)
