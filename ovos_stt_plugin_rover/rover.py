@@ -322,7 +322,6 @@ class WeightedROVER(ROVER):
         self.weights = weights
 
     def fit(self, hyps: Sequence[str]) -> str:
-        # If weights aren't provided for all hyps, default missing ones to 1.0
         """
         Generate a consensus transcript from multiple hypothesis strings using confidence weights for voting.
 
@@ -362,7 +361,6 @@ class IterativeROVER(ROVER):
     """
 
     def fit(self, hyps: Sequence[str]) -> str:
-        # Pass 1: Standard consensus
         """
         Refines a consensus transcript by running a two-pass ROVER alignment.
 
@@ -374,6 +372,7 @@ class IterativeROVER(ROVER):
         Returns:
             str: Final consensus transcript produced after the second-pass alignment.
         """
+        # Pass 1: Standard consensus
         initial_consensus = super().fit(hyps)
 
         # Pass 2: Re-align all hypotheses using the consensus as the primary reference
