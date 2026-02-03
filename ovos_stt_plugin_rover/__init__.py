@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from ovos_plugin_manager.stt import STT, load_stt_plugin
 from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils import classproperty
+from ovos_config import Configuration
 from ovos_utils.log import LOG
 
 from ovos_stt_plugin_rover.rover import ROVER, WeightedROVER, IterativeROVER
@@ -135,7 +136,7 @@ class ROVERSTT(STT):
 
         This is a static property; it reads plugin configuration from core config.
         """
-        cfg = cls.config_core.get("stt", {}).get("ovos-stt-plugin-rover", {}).get("backends", [])
+        cfg = Configuration().get("stt", {}).get("ovos-stt-plugin-rover", {}).get("backends", [])
         if not cfg:
             return set()
 
