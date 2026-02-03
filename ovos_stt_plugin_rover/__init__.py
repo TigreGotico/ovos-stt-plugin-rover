@@ -135,7 +135,7 @@ class ROVERSTT(STT):
 
         This is a static property; it reads plugin configuration from core config.
         """
-        cfg = cls.config_core.get("stt", {}).get("backends", [])
+        cfg = cls.config_core.get("stt", {}).get("ovos-stt-plugin-rover", {}).get("backends", [])
         if not cfg:
             return set()
 
