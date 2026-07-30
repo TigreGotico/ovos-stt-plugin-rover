@@ -1,45 +1,37 @@
 # OVOS ROVER Aggregation STT Plugin
 
-This plugin provides a **meta-STT engine** for OVOS that aggregates the output of multiple individual STT backends using the **ROVER** (Recognizer Output Voting Error Reduction) algorithm.
-It delivers **higher transcription accuracy** at the cost of **additional compute**, making it useful in environments where correctness is prioritized over latency or energy use.
-
----
+This plugin is a meta-STT engine for OVOS. It runs several STT backends in parallel and combines their output with the ROVER (Recognizer Output Voting Error Reduction) algorithm. The result is a single, more accurate transcript, at the cost of running more than one STT engine per utterance.
 
 ## What is ROVER?
 
-**ROVER** is a post-processing method introduced by [J. G. Fiscus (ASRU 1997)](https://people.csail.mit.edu/joe/sctk-1.2/doc/rover/rover.htm).
-It aligns multiple ASR hypotheses using a dynamic-programming sequence alignment algorithm, constructs a **Word Transition Network (WTN)**, and performs **majority voting** at each aligned position to produce a consensus output.
+ROVER is a post-processing method from [J. G. Fiscus (ASRU 1997)](https://people.csail.mit.edu/joe/sctk-1.2/doc/rover/rover.htm). It aligns multiple ASR hypotheses with a dynamic-programming sequence alignment algorithm, builds a Word Transition Network (WTN), and takes a majority vote at each aligned position. The vote produces one consensus transcript.
 
-ROVER reduces the impact of individual backend biases or failure modes:
+ROVER reduces the effect of a single backend's errors:
 
 * If one backend misrecognizes a word but the others agree, the majority vote corrects it.
-* If multiple hypotheses disagree, the alignment layer compensates for insertions, deletions, and substitutions.
+* If the hypotheses disagree on word order, the alignment step compensates for insertions, deletions, and substitutions.
 
-In practice, ROVER improves accuracy most when backends have **different error characteristics** (e.g., one acoustic model excels at noisy speech, another at accents, another at punctuation).
+ROVER helps most when the backends have different error patterns, for example one acoustic model that handles noisy speech well and another that handles accents well.
 
----
+## Why use this plugin?
 
-## Why Use This Plugin?
+This plugin runs any number of OVOS STT plugins in parallel and merges their results into one transcript.
 
-This plugin allows you to run **any number of OVOS STT plugins in parallel** and merge their results into a single transcript.
+Benefits:
 
-### ✔ Benefits
+* Higher transcription accuracy than a single backend.
+* Less sensitivity to any one backend's errors.
+* Works with any mix of engines (Whisper, Vosk, or other OVOS STT plugins).
+* Backends run in parallel, so total time is close to the slowest backend, not the sum of all backends.
+* Each backend has its own timeout, so one slow or failing backend does not block the others.
 
-* Higher transcription accuracy
-* Robust to backend-specific errors
-* Supports arbitrary mix of engines (Whisper, Vosk, DeepSpeech, external APIs, etc.)
-* Parallel execution for maximal throughput
-* Timeout and failure isolation per backend
+Costs:
 
-### ✘ Costs
+* More compute, since N STT engines run instead of one.
+* More memory use.
+* Latency bound by the slowest backend, unless you set an aggressive timeout.
 
-* More compute (N STT engines run instead of 1)
-* Possibly higher memory use
-* Increased latency proportional to the slowest backend (unless using aggressive timeouts)
-
-If accuracy is critical (assistants in noisy environments, smart home devices, call-center AI, transcription services) the gain can be significant.
-
----
+Use this plugin where accuracy matters more than raw latency or compute cost, for example assistants in noisy environments, smart home devices, call-center transcription, or offline transcription services.
 
 ## Installation
 
@@ -47,11 +39,9 @@ If accuracy is critical (assistants in noisy environments, smart home devices, c
 pip install ovos-stt-plugin-rover
 ```
 
-Ensure that the backend STT plugins you want to aggregate are installed as well.
+Install the backend STT plugins you want to aggregate as well.
 
----
-
-## Configuration Example
+## Configuration example
 
 Add this to your `mycroft.conf`:
 
@@ -90,39 +80,41 @@ Add this to your `mycroft.conf`:
 ### Fields
 
 | Key        | Meaning                                        |
-| ---------- | ---------------------------------------------- |
-| `timeout`  | Total timeout for all backends to complete     |
-| `workers`  | Max number of parallel threads                 |
-| `backends` | List of STT backends to load & ROVER-aggregate |
+| ---------- | ----------------------------------------------- |
+| `timeout`  | Total timeout for all backends to finish        |
+| `workers`  | Maximum number of parallel threads              |
+| `backends` | List of STT backends to load and aggregate with ROVER |
 
-Any STT backend supported by OVOS can be loaded here.
+You can load any STT backend that OVOS supports here.
 
----
-
-## How It Works
+## How it works
 
 1. The plugin loads all configured STT backends.
-2. A thread pool executes each backend in parallel on the same audio.
-3. Each backend has isolated timeout and exception handling.
-4. Successful transcripts are collected.
-5. If only one transcript succeeds → returned directly.
-   If multiple → passed to the internal ROVER engine.
-6. ROVER aligns the sequences, constructs a WTN, and performs majority voting.
-7. The consensus transcript is returned to OVOS.
+2. A thread pool runs each backend in parallel on the same audio.
+3. Each backend has its own timeout and exception handling.
+4. The plugin collects the transcripts that succeed.
+5. If only one transcript succeeds, the plugin returns it directly. If more than one succeeds, they go to the ROVER engine.
+6. ROVER aligns the sequences, builds a WTN, and takes a majority vote.
+7. The plugin returns the consensus transcript to OVOS.
 
----
+## When to use this plugin
 
-## When Should You Use This?
+Use this plugin when:
 
-Use ROVER-STT when:
-
-* **Accuracy is more important than compute cost**
-* The system has **multiple ASR models with complementary strengths**
-* You need **robustness** against individual backend failures
-* You want **ensemble behavior** without modifying backend models
+* Accuracy matters more than compute cost.
+* You have multiple ASR models with different strengths.
+* You need robustness against a single backend's failures.
+* You want ensemble behavior without changing the backend models.
 
 Avoid it when:
 
-* You are running on **resource-constrained hardware**
-* You require **low-latency** responses
+* You run on resource-constrained hardware.
+* You need low-latency responses.
 
+## Related projects
+
+This plugin loads other [OVOS STT plugins](https://github.com/orgs/OpenVoiceOS/repositories?q=ovos-stt-plugin) as backends, including [ovos-stt-plugin-whisper](https://github.com/OpenVoiceOS/ovos-stt-plugin-whisper) and [ovos-stt-plugin-vosk](https://github.com/OpenVoiceOS/ovos-stt-plugin-vosk), shown in the configuration example above.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
