@@ -4,10 +4,10 @@ from typing import List, Optional, Dict, Any, Tuple
 from ovos_plugin_manager.stt import STT, load_stt_plugin
 from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils import classproperty
+from ovos_config import Configuration
 from ovos_utils.log import LOG
 
-from ovos_stt_plugin_rover.rover import ROVER
-
+from ovos_stt_plugin_rover.rover import ROVER, WeightedROVER, IterativeROVER
 
 
 class ROVERSTT(STT):
@@ -39,6 +39,8 @@ class ROVERSTT(STT):
         self.max_workers: int = int(self.config.get("workers", len(backend_cfgs)))
 
         self.backends: List[STT] = []
+        weights = []
+
         for bcfg in backend_cfgs:
             module = bcfg.get("module")
             if not module:
@@ -46,20 +48,30 @@ class ROVERSTT(STT):
 
             try:
                 plugin = load_stt_plugin(module)(bcfg.get("config", {}))
+                self.backends.append(plugin)
+                # Collect weights from config for WeightedROVER
+                weights.append(bcfg.get("weight", 1.0))
             except Exception as e:
                 LOG.error(f"Failed to load backend '{module}': {e}")
                 continue
-            self.backends.append(plugin)
 
         if not self.backends:
             raise RuntimeError("All backends failed to load")
 
-        self.rover = ROVER()
+        # Select Algorithm
+        algo = self.config.get("algo", "ROVER").lower()
+        if algo == "wROVER".lower():
+            self.rover = WeightedROVER(weights=weights)
+        elif algo == "itROVER".lower():
+            self.rover = IterativeROVER()
+        else:
+            self.rover = ROVER()
+        LOG.info(f"algorithm: {self.rover.__class__.__name__}")
 
     # ----------------------------------------------------------------------
 
     def _run_backend(
-        self, stt: STT, audio: AudioData, language: Optional[str]
+            self, stt: STT, audio: AudioData, language: Optional[str]
     ) -> Tuple[bool, Optional[str], Optional[Exception]]:
         """Isolated execution wrapper for a backend."""
         try:
@@ -124,7 +136,7 @@ class ROVERSTT(STT):
 
         This is a static property; it reads plugin configuration from core config.
         """
-        cfg = cls.config_core.get("stt", {}).get("backends", [])
+        cfg = Configuration().get("stt", {}).get("ovos-stt-plugin-rover", {}).get("backends", [])
         if not cfg:
             return set()
 
@@ -147,3 +159,29 @@ class ROVERSTT(STT):
                 langs &= set(plugin_langs)
 
         return langs or set()
+
+
+if __name__ == "__main__":
+    b = ROVERSTT(config={"lang": "en",
+                         "algo": "wROVER",
+                         "backends": [
+                             {"module": "ovos-stt-plugin-onnxasr",
+                              "weight": 0.9,
+                              "config": {"model": "nemo-canary-1b-v2", "quantization": "int8"}},
+                             {"module": "ovos-stt-plugin-onnxasr",
+                              "weight": 0.8,
+                              "config": {"model": "nemo-parakeet-tdt-0.6b-v3", "quantization": "int8"}},
+                             {"module": "ovos-stt-plugin-vosk",
+                              "weight": 0.5,
+                              "config": {"lang": "en"}},
+                             {"module": "ovos-stt-plugin-citrinet",
+                              "weight": 0.3,
+                              "config": {"lang": "en"}}
+                         ]
+                         })
+
+    eu = "/home/miro/PycharmProjects/ovos-stt-plugin-vosk/jfk.wav"
+    audio = AudioData.from_file(eu)
+
+    a = b.execute(audio, language="en")
+    print(a)
